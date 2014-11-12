@@ -53,7 +53,6 @@ func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer httpu.Close()
 	responses, err := ssdp.SSDPRawSearch(httpu, string(searchTarget), 2, 3)
 	if err != nil {
 		return nil, err
@@ -98,11 +97,12 @@ func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 		}
 	}()
 	go func() {
-		log.Println("Waiting for no more responses")
+		defer httpu.Close()
 		wg.Wait()
-		close(results)
 		log.Println("Closed outbound channel")
+		close(results)
 	}()
+	log.Println("Exiting DiscoverDevices()")
 	return results, nil
 }
 

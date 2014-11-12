@@ -44,11 +44,11 @@ func (httpu *HTTPUClient) Close() error {
 // Note that at present only one concurrent connection will happen per
 // HTTPUClient.
 func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends int) (<-chan *http.Response, error) {
-	httpu.connLock.Lock()
 
 	// Create the request. This is a subset of what http.Request.Write does
 	// deliberately to avoid creating extra fields which may confuse some
 	// devices.
+	httpu.connLock.Lock()
 	var requestBuf bytes.Buffer
 	method := req.Method
 	if method == "" {

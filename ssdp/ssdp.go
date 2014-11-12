@@ -55,7 +55,10 @@ func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds
 		return nil, err
 	}
 	go func() {
-		defer close(responses)
+		defer func() {
+			log.Println("Closing ssdp responses()")
+			close(responses)
+		}()
 		for response := range allResponses {
 			log.Println("Received a response")
 			if response.StatusCode != 200 {
