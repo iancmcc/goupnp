@@ -45,7 +45,6 @@ func (httpu *HTTPUClient) Close() error {
 // HTTPUClient.
 func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends int) (<-chan *http.Response, error) {
 	httpu.connLock.Lock()
-	defer httpu.connLock.Unlock()
 
 	// Create the request. This is a subset of what http.Request.Write does
 	// deliberately to avoid creating extra fields which may confuse some
@@ -89,6 +88,7 @@ func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends 
 	responseBytes := make([]byte, 2048)
 	go func() {
 		defer close(responses)
+		defer httpu.connLock.Unlock()
 		for {
 			// 2048 bytes should be sufficient for most networks.
 			n, _, err := httpu.conn.ReadFrom(responseBytes)

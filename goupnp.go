@@ -17,8 +17,10 @@ package goupnp
 import (
 	"encoding/xml"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/iancmcc/goupnp/httpu"
 	"github.com/iancmcc/goupnp/ssdp"
@@ -58,39 +60,49 @@ func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 	}
 
 	results := make(chan MaybeRootDevice)
-	defer close(results)
-	for response := range responses {
-		go func() {
-			maybe := &MaybeRootDevice{}
-			loc, err := response.Location()
-			if err != nil {
+	var wg sync.WaitGroup
+	go func() {
+		for response := range responses {
+			wg.Add(1)
+			log.Println("Added one to wait group")
+			go func() {
+				defer wg.Done()
+				maybe := &MaybeRootDevice{}
+				loc, err := response.Location()
+				if err != nil {
 
-				maybe.Err = ContextError{"unexpected bad location from search", err}
-				return
-			}
-			locStr := loc.String()
-			root := new(RootDevice)
-			if err := requestXml(locStr, DeviceXMLNamespace, root); err != nil {
-				maybe.Err = ContextError{fmt.Sprintf("error requesting root device details from %q", locStr), err}
-				return
-			}
-			var urlBaseStr string
-			if root.URLBaseStr != "" {
-				urlBaseStr = root.URLBaseStr
-			} else {
-				urlBaseStr = locStr
-			}
-			urlBase, err := url.Parse(urlBaseStr)
-			if err != nil {
-				maybe.Err = ContextError{fmt.Sprintf("error parsing location URL %q", locStr), err}
-				return
-			}
-			root.SetURLBase(urlBase)
-			maybe.Root = root
-			results <- *maybe
-		}()
-	}
-
+					maybe.Err = ContextError{"unexpected bad location from search", err}
+					return
+				}
+				locStr := loc.String()
+				root := new(RootDevice)
+				if err := requestXml(locStr, DeviceXMLNamespace, root); err != nil {
+					maybe.Err = ContextError{fmt.Sprintf("error requesting root device details from %q", locStr), err}
+					return
+				}
+				var urlBaseStr string
+				if root.URLBaseStr != "" {
+					urlBaseStr = root.URLBaseStr
+				} else {
+					urlBaseStr = locStr
+				}
+				urlBase, err := url.Parse(urlBaseStr)
+				if err != nil {
+					maybe.Err = ContextError{fmt.Sprintf("error parsing location URL %q", locStr), err}
+					return
+				}
+				root.SetURLBase(urlBase)
+				maybe.Root = root
+				results <- *maybe
+			}()
+		}
+	}()
+	go func() {
+		log.Println("Waiting for no more responses")
+		wg.Wait()
+		close(results)
+		log.Println("Closed outbound channel")
+	}()
 	return results, nil
 }
 

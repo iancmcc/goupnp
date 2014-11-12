@@ -30,6 +30,7 @@ const (
 // reasonable value for this. numSends is the number of requests to send - 3 is
 // a reasonable value for this.
 func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds int, numSends int) (<-chan *http.Response, error) {
+	log.Println("SSDPRawSearch()")
 	if maxWaitSeconds < 1 {
 		return nil, errors.New("ssdp: maxWaitSeconds must be >= 1")
 	}
@@ -54,8 +55,9 @@ func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds
 		return nil, err
 	}
 	go func() {
+		defer close(responses)
 		for response := range allResponses {
-			defer close(responses)
+			log.Println("Received a response")
 			if response.StatusCode != 200 {
 				log.Printf("ssdp: got response status code %q in search response", response.Status)
 				continue
@@ -80,6 +82,8 @@ func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds
 			}
 		}
 	}()
+
+	log.Println("Returning from ssdp.RawSearch")
 
 	return responses, nil
 }
