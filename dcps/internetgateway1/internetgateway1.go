@@ -11,8 +11,8 @@ package internetgateway1
 import (
 	"time"
 
-	"github.com/huin/goupnp"
-	"github.com/huin/goupnp/soap"
+	"github.com/iancmcc/goupnp"
+	"github.com/iancmcc/goupnp/soap"
 )
 
 // Hack to avoid Go complaining if time isn't used.

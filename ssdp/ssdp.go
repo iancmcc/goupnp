@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/huin/goupnp/httpu"
+	"github.com/iancmcc/goupnp/httpu"
 )
 
 const (
@@ -29,13 +29,12 @@ const (
 // implementation waits an additional 100ms for responses to arrive), 2 is a
 // reasonable value for this. numSends is the number of requests to send - 3 is
 // a reasonable value for this.
-func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds int, numSends int) ([]*http.Response, error) {
+func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds int, numSends int) (<-chan *http.Response, error) {
 	if maxWaitSeconds < 1 {
 		return nil, errors.New("ssdp: maxWaitSeconds must be >= 1")
 	}
-
+	responses := make(chan *http.Response)
 	seenUsns := make(map[string]bool)
-	var responses []*http.Response
 	req := http.Request{
 		Method: methodSearch,
 		// TODO: Support both IPv4 and IPv6.
@@ -54,30 +53,33 @@ func SSDPRawSearch(httpu *httpu.HTTPUClient, searchTarget string, maxWaitSeconds
 	if err != nil {
 		return nil, err
 	}
-	for _, response := range allResponses {
-		if response.StatusCode != 200 {
-			log.Printf("ssdp: got response status code %q in search response", response.Status)
-			continue
+	go func() {
+		for response := range allResponses {
+			defer close(responses)
+			if response.StatusCode != 200 {
+				log.Printf("ssdp: got response status code %q in search response", response.Status)
+				continue
+			}
+			if st := response.Header.Get("ST"); st != searchTarget {
+				log.Printf("ssdp: got unexpected search target result %q", st)
+				continue
+			}
+			location, err := response.Location()
+			if err != nil {
+				log.Printf("ssdp: no usable location in search response (discarding): %v", err)
+				continue
+			}
+			usn := response.Header.Get("USN")
+			if usn == "" {
+				log.Printf("ssdp: empty/missing USN in search response (using location instead): %v", err)
+				usn = location.String()
+			}
+			if _, alreadySeen := seenUsns[usn]; !alreadySeen {
+				seenUsns[usn] = true
+				responses <- response
+			}
 		}
-		if st := response.Header.Get("ST"); st != searchTarget {
-			log.Printf("ssdp: got unexpected search target result %q", st)
-			continue
-		}
-		location, err := response.Location()
-		if err != nil {
-			log.Printf("ssdp: no usable location in search response (discarding): %v", err)
-			continue
-		}
-		usn := response.Header.Get("USN")
-		if usn == "" {
-			log.Printf("ssdp: empty/missing USN in search response (using location instead): %v", err)
-			usn = location.String()
-		}
-		if _, alreadySeen := seenUsns[usn]; !alreadySeen {
-			seenUsns[usn] = true
-			responses = append(responses, response)
-		}
-	}
+	}()
 
 	return responses, nil
 }

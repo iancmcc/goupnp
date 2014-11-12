@@ -43,7 +43,7 @@ func (httpu *HTTPUClient) Close() error {
 //
 // Note that at present only one concurrent connection will happen per
 // HTTPUClient.
-func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends int) ([]*http.Response, error) {
+func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends int) (<-chan *http.Response, error) {
 	httpu.connLock.Lock()
 	defer httpu.connLock.Unlock()
 
@@ -85,33 +85,37 @@ func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends 
 	}
 
 	// Await responses until timeout.
-	var responses []*http.Response
+	responses := make(chan *http.Response)
 	responseBytes := make([]byte, 2048)
-	for {
-		// 2048 bytes should be sufficient for most networks.
-		n, _, err := httpu.conn.ReadFrom(responseBytes)
-		if err != nil {
-			if err, ok := err.(net.Error); ok {
-				if err.Timeout() {
-					break
+	go func() {
+		defer close(responses)
+		for {
+			// 2048 bytes should be sufficient for most networks.
+			n, _, err := httpu.conn.ReadFrom(responseBytes)
+			if err != nil {
+				if err, ok := err.(net.Error); ok {
+					if err.Timeout() {
+						break
+					}
+					if err.Temporary() {
+						// Sleep in case this is a persistent error to avoid pegging CPU until deadline.
+						time.Sleep(10 * time.Millisecond)
+						continue
+					}
 				}
-				if err.Temporary() {
-					// Sleep in case this is a persistent error to avoid pegging CPU until deadline.
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
+				log.Print("Error while reading response: %v", err)
+				continue
 			}
-			return nil, err
-		}
 
-		// Parse response.
-		response, err := http.ReadResponse(bufio.NewReader(bytes.NewBuffer(responseBytes[:n])), req)
-		if err != nil {
-			log.Print("httpu: error while parsing response: %v", err)
-			continue
-		}
+			// Parse response.
+			response, err := http.ReadResponse(bufio.NewReader(bytes.NewBuffer(responseBytes[:n])), req)
+			if err != nil {
+				log.Print("httpu: error while parsing response: %v", err)
+				continue
+			}
 
-		responses = append(responses, response)
-	}
+			responses <- response
+		}
+	}()
 	return responses, err
 }

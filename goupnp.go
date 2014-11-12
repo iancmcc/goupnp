@@ -1,11 +1,11 @@
 // goupnp is an implementation of a client for various UPnP services.
 //
 // For most uses, it is recommended to use the code-generated packages under
-// github.com/huin/goupnp/dcps. Example use is shown at
-// http://godoc.org/github.com/huin/goupnp/example
+// github.com/iancmcc/goupnp/dcps. Example use is shown at
+// http://godoc.org/github.com/iancmcc/goupnp/example
 //
 // A commonly used client is internetgateway1.WANPPPConnection1:
-// http://godoc.org/github.com/huin/goupnp/dcps/internetgateway1#WANPPPConnection1
+// http://godoc.org/github.com/iancmcc/goupnp/dcps/internetgateway1#WANPPPConnection1
 //
 // Currently only a couple of schemas have code generated for them from the
 // UPnP example XML specifications. Not all methods will work on these clients,
@@ -20,8 +20,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/huin/goupnp/httpu"
-	"github.com/huin/goupnp/ssdp"
+	"github.com/iancmcc/goupnp/httpu"
+	"github.com/iancmcc/goupnp/ssdp"
 )
 
 // ContextError is an error that wraps an error with some context information.
@@ -46,7 +46,7 @@ type MaybeRootDevice struct {
 // "urn:schemas-upnp-org:service:...". A single error is returned for errors
 // while attempting to send the query. An error or RootDevice is returned for
 // each discovered RootDevice.
-func DiscoverDevices(searchTarget string) ([]MaybeRootDevice, error) {
+func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 	httpu, err := httpu.NewHTTPUClient()
 	if err != nil {
 		return nil, err
@@ -57,34 +57,38 @@ func DiscoverDevices(searchTarget string) ([]MaybeRootDevice, error) {
 		return nil, err
 	}
 
-	results := make([]MaybeRootDevice, len(responses))
-	for i, response := range responses {
-		maybe := &results[i]
-		loc, err := response.Location()
-		if err != nil {
+	results := make(chan MaybeRootDevice)
+	defer close(results)
+	for response := range responses {
+		go func() {
+			maybe := &MaybeRootDevice{}
+			loc, err := response.Location()
+			if err != nil {
 
-			maybe.Err = ContextError{"unexpected bad location from search", err}
-			continue
-		}
-		locStr := loc.String()
-		root := new(RootDevice)
-		if err := requestXml(locStr, DeviceXMLNamespace, root); err != nil {
-			maybe.Err = ContextError{fmt.Sprintf("error requesting root device details from %q", locStr), err}
-			continue
-		}
-		var urlBaseStr string
-		if root.URLBaseStr != "" {
-			urlBaseStr = root.URLBaseStr
-		} else {
-			urlBaseStr = locStr
-		}
-		urlBase, err := url.Parse(urlBaseStr)
-		if err != nil {
-			maybe.Err = ContextError{fmt.Sprintf("error parsing location URL %q", locStr), err}
-			continue
-		}
-		root.SetURLBase(urlBase)
-		maybe.Root = root
+				maybe.Err = ContextError{"unexpected bad location from search", err}
+				return
+			}
+			locStr := loc.String()
+			root := new(RootDevice)
+			if err := requestXml(locStr, DeviceXMLNamespace, root); err != nil {
+				maybe.Err = ContextError{fmt.Sprintf("error requesting root device details from %q", locStr), err}
+				return
+			}
+			var urlBaseStr string
+			if root.URLBaseStr != "" {
+				urlBaseStr = root.URLBaseStr
+			} else {
+				urlBaseStr = locStr
+			}
+			urlBase, err := url.Parse(urlBaseStr)
+			if err != nil {
+				maybe.Err = ContextError{fmt.Sprintf("error parsing location URL %q", locStr), err}
+				return
+			}
+			root.SetURLBase(urlBase)
+			maybe.Root = root
+			results <- *maybe
+		}()
 	}
 
 	return results, nil

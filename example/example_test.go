@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/huin/goupnp"
-	"github.com/huin/goupnp/dcps/internetgateway1"
+	"github.com/iancmcc/goupnp"
+	"github.com/iancmcc/goupnp/dcps/internetgateway1"
 )
 
 // Use discovered WANPPPConnection1 services to find external IP addresses.

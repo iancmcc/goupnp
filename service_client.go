@@ -2,7 +2,8 @@ package goupnp
 
 import (
 	"fmt"
-	"github.com/huin/goupnp/soap"
+
+	"github.com/iancmcc/goupnp/soap"
 )
 
 // ServiceClient is a SOAP client, root device and the service for the SOAP
@@ -15,14 +16,15 @@ type ServiceClient struct {
 }
 
 func NewServiceClients(searchTarget string) (clients []ServiceClient, errors []error, err error) {
-	var maybeRootDevices []MaybeRootDevice
+
+	var maybeRootDevices <-chan MaybeRootDevice
 	if maybeRootDevices, err = DiscoverDevices(searchTarget); err != nil {
 		return
 	}
 
 	clients = make([]ServiceClient, 0, len(maybeRootDevices))
 
-	for _, maybeRootDevice := range maybeRootDevices {
+	for maybeRootDevice := range maybeRootDevices {
 		if maybeRootDevice.Err != nil {
 			errors = append(errors, maybeRootDevice.Err)
 			continue
