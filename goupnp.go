@@ -17,7 +17,6 @@ package goupnp
 import (
 	"encoding/xml"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -63,13 +62,11 @@ func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 	go func() {
 		for response := range responses {
 			wg.Add(1)
-			log.Println("Added one to wait group")
 			go func() {
 				defer wg.Done()
 				maybe := &MaybeRootDevice{}
 				loc, err := response.Location()
 				if err != nil {
-
 					maybe.Err = ContextError{"unexpected bad location from search", err}
 					return
 				}
@@ -97,12 +94,10 @@ func DiscoverDevices(searchTarget string) (<-chan MaybeRootDevice, error) {
 		}
 	}()
 	go func() {
+		defer close(results)
 		defer httpu.Close()
 		wg.Wait()
-		log.Println("Closed outbound channel")
-		close(results)
 	}()
-	log.Println("Exiting DiscoverDevices()")
 	return results, nil
 }
 

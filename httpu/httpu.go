@@ -103,7 +103,7 @@ func (httpu *HTTPUClient) Do(req *http.Request, timeout time.Duration, numSends 
 						continue
 					}
 				}
-				log.Print("Error while reading response: %v", err)
+				log.Printf("Error while reading response: %v", err)
 				continue
 			}
 
